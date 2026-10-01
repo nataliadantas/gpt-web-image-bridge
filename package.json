@@ -1,0 +1,16 @@
+{
+  "name": "gpt-web-image-bridge",
+  "version": "0.2.0",
+  "description": "让本地 agent 通过网页版 ChatGPT 生成图片的桥接程序（CLI / HTTP / MCP）",
+  "type": "module",
+  "license": "MIT",
+  "keywords": ["chatgpt", "image-generation", "mcp", "openai-compatible", "patchright", "agent"],
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.18.0",
+    "patchright": "^1.63.0",
+    "playwright": "^1.55.0"
+  }
+}

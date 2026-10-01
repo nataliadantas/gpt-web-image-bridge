@@ -1,0 +1,4 @@
+node_modules/
+.chrome-profile/
+output/
+config.json
