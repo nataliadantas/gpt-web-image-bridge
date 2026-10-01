@@ -1,23 +1,23 @@
 #!/usr/bin/env node
 /**
- * gptimg.js — 网页版 ChatGPT 生图桥接程序
+ * gptimg.js：网页版 ChatGPT 生图桥接程序
  *
  * 用法：
- *   node gptimg.js login                      首次登录（打开浏览器，人工登录后回车保存会话）
- *   node gptimg.js setproject [项目URL]        配置"生图"项目（所有生图对话收进该项目）
- *   node gptimg.js setapikey [key]            为 serve 服务设置 API Key（缺省自动生成随机 key）
- *   node gptimg.js gen "提示词" [选项]         生成图片，stdout 输出 JSON
- *   node gptimg.js serve [--port 3777]        常驻 HTTP 服务（推荐，含 OpenAI 兼容接口）
- *   node gptimg.js quota                      查看最近 3 小时已通过本程序生成了多少张图
- *   node gptimg.js doctor                     检查登录态与浏览器环境
+ *   node gptimg.js login                首次登录，打开浏览器人工登录后按回车保存会话
+ *   node gptimg.js setproject [项目URL]  配置“生图”项目，所有生图对话收进该项目
+ *   node gptimg.js setapikey [key]      为 serve 服务设置 API 密钥，缺省时自动生成随机密钥
+ *   node gptimg.js gen "提示词" [选项]   生成图片，stdout 输出 JSON
+ *   node gptimg.js serve [--port 3777]  常驻 HTTP 服务，推荐使用，含 OpenAI 兼容接口
+ *   node gptimg.js quota                查看最近 3 小时的生图数量
+ *   node gptimg.js doctor               检查登录态与浏览器环境
  *
  * gen 选项：
- *   --out 文件名        输出文件名（默认自动生成，保存在 output/ 下，仅 n=1 时生效）
- *   --timeout 秒数      默认 240
- *   --n 数量           一次批量生成（1~10，串行）
- *   --ratio 比例       如 16:9 / 2:3 / 1:1，附加到提示词约束宽高比
- *   --wait            触发限额时排队等待恢复后自动重试
- *   --headless         尝试无头模式（可能触发 Cloudflare 验证，默认关闭）
+ *   --out 文件名      输出文件名，默认自动生成，保存在 output/ 下，仅 n=1 时生效
+ *   --timeout 秒数    默认 240
+ *   --n 数量          批量生成 1~10 张，串行执行
+ *   --ratio 比例      例如 16:9、2:3、1:1，附加到提示词中约束宽高比
+ *   --wait           触发限额时排队等待恢复后自动重试
+ *   --headless       尝试无头模式，容易触发人机验证，默认关闭
  */
 import path from 'node:path';
 import fs from 'node:fs';
@@ -51,7 +51,7 @@ function saveConfig(cfg) {
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2) + '\n');
 }
 
-// 生图入口：配置了"生图"项目的 URL 后，所有生图对话都收进该项目，不污染项目外的对话
+// 生图入口：配置了“生图”项目的 URL 后，所有生图对话都收进该项目，不污染项目外的对话
 function chatUrl() {
   return loadConfig().project_url || DEFAULT_CHAT_URL;
 }
@@ -61,7 +61,7 @@ const DEFAULT_QUOTA_MAX_WAIT_MS = 3.4 * 3600_000;
 
 // ---------- 浏览器 ----------
 
-// 上次异常退出可能留下残留 Chrome 进程，占用 .chrome-profile 导致无法启动——清理之
+// 上次异常退出可能残留 Chrome 进程，占用 .chrome-profile 导致无法启动，这里予以清理
 function killProfileZombies() {
   if (process.platform !== 'win32') return Promise.resolve();
   const script = "Get-CimInstance Win32_Process | Where-Object { $_.Name -like 'chrome*' -and $_.CommandLine -like '*chrome-profile*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }";
@@ -104,7 +104,7 @@ async function launchContext({ headless = false } = {}) {
 
 // ---------- 页面元素 ----------
 
-// 网络抖动（如代理切节点导致 ERR_NETWORK_CHANGED）时自动重试
+// 网络抖动时自动重试，例如代理切换节点导致的 ERR_NETWORK_CHANGED
 async function gotoWithRetry(page, url, { attempts = 3, waitUntil = 'domcontentloaded', timeout = 60_000 } = {}) {
   for (let i = 1; ; i++) {
     try {
@@ -118,7 +118,7 @@ async function gotoWithRetry(page, url, { attempts = 3, waitUntil = 'domcontentl
   }
 }
 
-// 选择器多 fallback：data-testid 优先，退化到 aria-label（中英文 UI 文案均覆盖）
+// 多重回退选择器：优先 data-testid，回退到 aria-label，覆盖中英文两种界面文案
 const COMPOSER_SEL = '#prompt-textarea, div[contenteditable="true"], form textarea';
 const STOP_SEL = 'button[data-testid="stop-button"], button[aria-label*="Stop" i], button[aria-label*="停止"]';
 const SEND_SEL = 'button[data-testid="send-button"], #composer-submit-button, button[aria-label*="Send" i], button[aria-label*="发送"]';
@@ -141,7 +141,7 @@ async function waitForComposer(page, timeoutMs = 30_000) {
   }
 }
 
-// 取最后一条对话里的大图（排除头像等小图标），src 不在 baseline 里才算"新图"
+// 取最后一条对话里的大图，排除头像等小图标；src 不在 baseline 里才算“新图”
 function latestImageSrc(page, baseline) {
   return page.evaluate((baselineList) => {
     const arts = document.querySelectorAll('article[data-testid^="conversation-turn"], article');
@@ -154,7 +154,7 @@ function latestImageSrc(page, baseline) {
   }, baseline);
 }
 
-// 检测限额 / 报错文案
+// 检测限额及报错文案
 function detectError(page) {
   return page.evaluate(() => {
     const patterns = /usage cap|reached.*(limit|cap)|too many requests|try again later|rate limit|已达.{0,6}上限|使用次数|稍后.*再试|出了点问题|something went wrong/i;
@@ -278,7 +278,7 @@ export function countRecent(hours = 3) {
   return { used, since: new Date(cutoff).toISOString() };
 }
 
-// 登录态失效时：把浏览器窗口顶到最前，等人工重新登录/过人机验证，完成后自动继续
+// 登录态失效时：把浏览器窗口顶到最前，等待人工重新登录或通过人机验证，完成后自动继续
 async function interactiveRelogin(page, { timeoutMs = 300_000 } = {}) {
   console.error('[需要人工介入] 登录态失效，请在弹出的浏览器窗口中重新登录或通过人机验证（5 分钟内有效）...');
   await page.bringToFront().catch(() => {});
@@ -403,7 +403,7 @@ async function cmdSetProject(flags) {
   }
 }
 
-// 为 serve 服务设置 API Key（写入 config.json）
+// 为 serve 服务设置 API 密钥，写入 config.json
 async function cmdSetApiKey(flags) {
   const key = flags._[0] || crypto.randomBytes(24).toString('hex');
   saveConfig({ ...loadConfig(), api_key: key });
@@ -470,7 +470,7 @@ async function cmdServe(flags) {
   // 串行队列：同一时间只生成一张
   let queue = Promise.resolve();
 
-  // 空闲保活：每 30 分钟刷新一次页面，降低 Cloudflare / 会话掉线概率
+  // 空闲保活：每 30 分钟刷新一次页面，降低 Cloudflare 验证与会话掉线的概率
   setInterval(() => {
     queue = queue.then(async () => {
       try {
@@ -526,7 +526,7 @@ async function cmdServe(flags) {
       return send({ ok: true, last_3h: countRecent(3).used });
     }
 
-    // 排障：当前页面状态 + 截图（受 API Key 保护）
+    // 排障：当前页面状态与截图，受 API 密钥保护
     if (req.method === 'GET' && p === '/debug/pageinfo') {
       if (!authed(req)) return send({ ok: false, error_kind: 'auth', error: '未授权' }, 401);
       const info = { ok: true, url: page && !page.isClosed() ? page.url() : null };

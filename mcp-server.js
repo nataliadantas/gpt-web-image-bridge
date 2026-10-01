@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * mcp-server.js — 把"网页版 ChatGPT 生图"封装成 MCP 工具，供 Codex / 其他 agent 调用。
+ * mcp-server.js：把“网页版 ChatGPT 生图”封装成 MCP 工具，供 Codex 等 Agent 调用。
  *
  * 策略：优先连接本地常驻服务（node gptimg.js serve，速度快）；
- *       服务没开则退化为一次性 CLI 调用（每次要启动浏览器，慢 10~20 秒）。
+ *       服务未启动时退化为一次性 CLI 调用，每次需启动浏览器，慢 10~20 秒。
  *
  * 暴露的工具：
  *   generate_image(prompt, aspect_ratio?, timeout_sec?)  → { ok, path, elapsed_sec }
